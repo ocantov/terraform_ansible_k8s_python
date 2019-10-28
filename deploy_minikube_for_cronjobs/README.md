@@ -1,1 +1,4 @@
-
+Terraform creates minimal AWS resources to host a MiniKube on an EC2.
+Ansible installs/configures MiniKube and Docker-Compose
+Ansible deploys several Kubernetes resources needed to run a Kubernetes CronJob to backup and restore a Postgres database.
+Python script backups and restore the DB using S3 Bucket.
