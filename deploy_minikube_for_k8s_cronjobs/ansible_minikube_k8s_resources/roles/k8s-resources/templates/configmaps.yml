@@ -1,0 +1,263 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: script
+  namespace: jobs
+  labels:
+    app: postgress-backup
+data:
+  config.yaml: |-
+    ---
+    configs:
+        source:
+            host: '10.3.0.167'
+            port: '5432'
+            db: 'metabase'
+            username: 'postgres'
+        aws:
+            s3_bucket: 'postgres-backups-example'
+        destination:
+            host: '10.3.0.167'
+            port: '5432'
+            username: 'postgres'
+    backup: 
+        working_dir: "/data/shared"
+        pattern: "metabase"        
+    notification:
+        email:
+            sender: 'your.sender.email@zoho.com'
+            receivers:
+                - 'your.receiver.email@mail.com'
+            smtp_server: 'smtp.zoho.com'
+            port: '465'
+            user: your.sender.email
+            password: your.sender.email.password
+
+  postgress-backup.py: |-
+    #!/usr/bin/env python
+    import smtplib
+    import logging
+    import sys
+    import os
+    import re
+    from subprocess import PIPE,Popen
+    from datetime import date
+    import yaml
+    from collections import namedtuple
+    import smtplib
+    import time
+    from smtplib import SMTPException
+    from email import message
+    import boto3
+    from botocore.exceptions import ClientError
+
+
+    ## this class is to convert a dict into namedtuple
+    class Struct:
+        def __init__(self, **entries):
+            self.__dict__.update(entries)
+
+    #reading the yaml file
+    with open("config.yaml", 'r') as stream:
+          try:
+                datamap = (yaml.safe_load(stream))
+                y = Struct(**datamap)            
+                configs = Struct(**y.configs)
+                source = Struct(**configs.source)
+                dest = Struct(**configs.destination)
+                aws =  Struct(**configs.aws)
+                bkp_config = Struct(**y.backup)
+                log_notification = Struct(**y.notification)
+          
+          #backup config
+                working_dir = bkp_config.working_dir
+                pattern = bkp_config.pattern
+
+          #source configuration
+                source_host = source.host
+                source_port = source.port
+                source_db = source.db
+                source_db_user_name = source.username
+
+          #destination config
+                dest_host = dest.host
+                dest_port = dest.port
+                dest_db_user = dest.username
+
+          #aws
+                s3_bucket = aws.s3_bucket
+
+          # notifications
+                email_config = Struct(**log_notification.email)
+                sender = email_config.sender
+                smtp_server = email_config.smtp_server
+                smtp_server_port = email_config.port
+                smtp_server_user = email_config.user
+                smtp_server_pwd = email_config.password
+                receivers=  datamap['notification']['email']['receivers']
+
+          except yaml.YAMLError as exc:
+                print(exc)
+    try:  
+        aws_access_key_id = os.environ["AWS_ID"]
+        aws_secret_access_key = os.environ["AWS_KEY"]
+    except KeyError as e: 
+        logging.error('Env variable error: '+e)
+        logging.error('Backup and restore failed')
+        send_email(False,"Env variable error",new_db_name)      
+        sys.exit(1)
+
+    new_db_name = pattern+'_'+(date.today()).strftime("%Y%m%d")
+    backup_file = working_dir+'/'+new_db_name
+        
+    fh = logging.StreamHandler(sys.stdout)
+    logging.getLogger().addHandler(fh)
+    logging.getLogger().setLevel(logging.INFO)
+    formatter = logging.Formatter('%(levelname)s : %(message)s')
+    fh.setFormatter(formatter)
+
+    def dump_db (host,port,user,file,database):
+          command = 'pg_dump -h {0} -p {1} -U {2} -C -Z 6 --format custom -f {3} {4}'.format(host,port,user,file,database)
+          p = Popen(command,shell=True,stdin=PIPE,stdout=PIPE,stderr=PIPE,encoding='utf8')     
+          output = str(p.communicate())
+          result = ''
+          if output == '(\'\', \'\')':
+                result = 'Database '+database+' dummped successfully'
+                logging.info(result)
+          else:
+                logging.error(output)
+                logging.error('Backup and restore failed')
+                send_email(False,output,new_db_name)            
+                sys.exit(-1)
+          return result
+
+    def s3_upload(bucket,aws_access_key_id,aws_secret_access_key, file_name, object_name ):
+        
+        s3_client = boto3.client('s3',aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+      
+        try:   
+          response = s3_client.upload_file(file_name, bucket, object_name)
+          print(str(response))
+
+          if 'None' in str(response):
+            logging.info('File '+file_name+' uploaded to S3://'+s3_bucket)  
+          else:
+            print(response)
+        except ClientError as e:
+            logging.error(str(e))
+            logging.error('Backup and restore failed')
+            send_email(False,str(e),new_db_name)              
+            sys.exit(-1)
+            return False
+        return True
+
+    def delete_file(file_name):
+          try:
+            os.remove(file_name)
+            logging.info('File '+file_name+' deleted')
+          except (IOError, OSError) as e:
+            logging.error(str(e))    
+            logging.error('Backup and restore failed')
+            send_email(False,str(e),new_db_name)          
+            sys.exit(-1)
+
+
+    def s3_download(bucket,aws_access_key_id,aws_secret_access_key, s3_filename, local_filename):
+        
+        s3_client = boto3.client('s3',aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+      
+        try:   
+          response = s3_client.download_file(bucket, s3_filename, local_filename)
+
+          if 'None' in str(response):
+            logging.info('File '+s3_filename+' downloaded from S3://'+s3_bucket)  
+          else:
+            print(response)
+        except ClientError as e:
+            logging.error(str(e))    
+            logging.error('Backup and restore failed')
+            send_email(False,str(e),new_db_name)                 
+            sys.exit(-1)
+            return False
+        return True
+
+    def s3_delete_file (bucket,aws_access_key_id,aws_secret_access_key, object_name):
+        
+        s3_client = boto3.client('s3',aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+        try:   
+          s3_client.delete_object(Bucket=bucket, Key=object_name)
+          logging.info(object_name+' file was delete from S3://'+s3_bucket)  
+        except ClientError as e:
+          logging.error(e)
+          logging.error('Backup and restore failed')
+          send_email(False,str(e),new_db_name)    
+          return False
+        return True
+
+
+    def restore_db(host,port,user,source_file,db_to_issue,db_dest): 
+          error_re = re.compile(r'error', flags=re.IGNORECASE)  
+          create_db = 'psql -h {0} -p {1} -d {2} -U {3} -c "CREATE DATABASE {4}"'.format(host,port,db_to_issue,user,db_dest)
+          d = Popen(create_db,shell=True,stdin=PIPE,stdout=PIPE,stderr=PIPE,encoding='utf8')
+          result1 = str((d.communicate()))
+          if re.search(error_re,result1):
+            logging.error('Creating new database: '+db_dest+', an error occurred')
+            logging.error(result1)
+            logging.error('Backup and restore failed')
+            send_email(False,result1,new_db_name)        
+            sys.exit(-1)
+          else:
+            logging.info('Database: '+db_dest+' successfully created.')
+
+          command = 'pg_restore -h {0} -p {1} -d {2} -U {3} -s {4}'.format(host,port,db_dest,user,source_file)
+          p = Popen(command,shell=True,stdin=PIPE,stdout=PIPE,stderr=PIPE,encoding='utf8')
+          result2 = str((p.communicate()))
+          if re.search(error_re,result2):
+            logging.error('Restoring the database: '+db_dest+', an error occurred')
+            logging.error(result2)
+            send_email(False,result2,new_db_name)
+            logging.error('Backup and restore failed')        
+            sys.exit(-1)
+          else:
+            logging.info('Database: '+db_dest+' successfully restored.')
+            send_email(True,result2,new_db_name)
+                
+
+    def send_email(status,result,dest_db):
+        msg=message.Message()
+        if status:
+            msg.add_header('subject', 'Database '+dest_db+' was restored successfully at '+time.strftime("%Y-%m-%d %H:%M"))
+            msg.set_payload('It was restored successfully, no errors')
+        else:
+            msg.add_header('subject', 'ERROR: '+dest_db+' was not restored successfully at '+time.strftime("%Y-%m-%d %H:%M"))
+            msg.set_payload(dest_db+' was not restored successfully, error: \n\n'+result)
+      
+        msg.add_header('from',sender)
+        msg.add_header('to',sender)
+        
+
+        try:
+            smtpObj = smtplib.SMTP_SSL(smtp_server,smtp_server_port)
+            smtpObj.ehlo()
+            smtpObj.login(smtp_server_user,smtp_server_pwd)
+            smtpObj.sendmail(sender, receivers, msg.as_string())         
+            print ("An e-mail notification was sent to: "+str(receivers))
+            smtpObj.quit()
+        except SMTPException as e:
+            print("Error: unable to send email notification:\n\n"+str(e))
+            smtpObj.quit()
+
+
+    def main():
+          logging.info(time.strftime('Started: '+"%Y-%m-%d %H:%M"))
+          dump_db(source_host,source_port,source_db_user_name,backup_file,source_db)
+          s3_upload(s3_bucket,aws_access_key_id,aws_secret_access_key,backup_file, new_db_name)    
+          delete_file(backup_file)
+          s3_download(s3_bucket,aws_access_key_id,aws_secret_access_key,new_db_name,backup_file)   
+          s3_delete_file(s3_bucket,aws_access_key_id,aws_secret_access_key,new_db_name)
+          restore_db(dest_host, dest_port, dest_db_user, backup_file, source_db, new_db_name)
+          logging.info(time.strftime('Finished: '+"%Y-%m-%d %H:%M"))      
+
+                
+    if __name__ == "__main__":
+        main()

@@ -1,0 +1,50 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: postgress-backup
+  namespace: jobs
+spec:
+  #schedule: "*/5 * * * *"
+  schedule: "40 19 * * 3"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: hello
+            image: cloud.canister.io:5000/ocantov/img:postgres12-python-alpine
+            env:
+              - name: AWS_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: aws
+                    key: aws_id
+              - name: AWS_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: aws
+                    key: aws_key
+            args:
+            - /usr/bin/python3
+            - /app/postgress-backup.py
+            volumeMounts:
+              - mountPath: /app
+                name: script-config
+              - mountPath: "/root"
+                name: pgpass
+              - mountPath: /data/shared/
+                name: backup-fs 
+          restartPolicy: OnFailure
+          imagePullSecrets:
+          - name: canister
+          volumes:
+          - name: script-config
+            configMap: 
+              name: script
+          - name: pgpass
+            secret:
+              secretName: pgpass1
+              defaultMode: 256
+          - name: backup-fs
+            persistentVolumeClaim:
+              claimName: hostpath-claim

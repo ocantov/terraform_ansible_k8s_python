@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hostpath-claim
+  namespace: jobs
+  labels:
+    app: hostpath-claim
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-storage  
+  resources:
+    requests:
+      storage: 1Gi
+  volumeName: backup-fs

@@ -1,0 +1,14 @@
+---
+# defaults file for k8s
+# Edition can be one of: 'ce' (Community Edition) or 'ee' (Enterprise Edition).
+k8s_version: '1.15.3'
+k8s_package_release: 0
+linux_user: centos
+
+kubectl_package: "kubectl-{{ k8s_version }}-{{k8s_package_release}}.x86_64"
+kubectl_package_state: present
+
+# Service options.
+kubelet_service_state: started
+kubelet_service_enabled: true
+kubelet_restart_handler_state: restarted

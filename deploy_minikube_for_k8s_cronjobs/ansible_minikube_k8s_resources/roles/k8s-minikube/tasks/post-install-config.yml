@@ -1,0 +1,45 @@
+- name: Create kube config folder
+  file:
+    path: "/home/{{ linux_user }}/.kube"
+    state: directory
+  register: command_output
+  when:
+    - inventory_hostname == "minikube"
+
+- name: Create folder for persistent volume
+  file:
+    path: "/var/tmp/k8s_hostpath"
+    state: directory
+  when:
+    - inventory_hostname == "minikube"
+#- name: config Kubeconfig
+#  shell: "cp -i /etc/kubernetes/admin.conf  && cp -i /etc/kubernetes/admin.conf /home/{{ linux_user }}/.kube/config && chown {{ linux_user }}:{{ linux_user }} /home/{{ linux_user }}/.kube/config"
+#  when:
+#  - inventory_hostname == "master"
+
+- name: Copy config for Kubectl
+  copy: 
+    src: /etc/kubernetes/admin.conf
+    dest: "/home/{{ linux_user }}/.kube/config"
+    owner: "{{ linux_user }}"
+    group: "{{ linux_user }}"
+    mode: '0644'
+    remote_src: yes
+  when:
+    - inventory_hostname == "minikube"
+    - command_output.changed  
+
+- name: Install pip requests
+  pip:
+    name: requests
+    version: 2.22.0
+
+- name: Install pip setuptools
+  pip:
+    name: setuptools
+    version: 41.4.0   
+
+- name: Install pip openshift
+  pip:
+    name: openshift
+    version: 0.9.1 

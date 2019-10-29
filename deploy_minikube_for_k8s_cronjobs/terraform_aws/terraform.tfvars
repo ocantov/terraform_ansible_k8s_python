@@ -1,0 +1,13 @@
+profile                             = "default"
+region                              = "us-east-1"
+av-zones                            = ["us-east-1b"]
+vpc-cidr                            = "10.3.0.0/24"
+cluster-name                        = "k8s"
+environment                         = "dev"
+k8s-pub-subnets-cidrs               = ["10.3.0.128/26"]
+k8s-masters-ami-id                  = "ami-02eac2c0129f6376b"
+k8s-masters-instance-type           = "t3a.medium"
+ssh-key-name                        = "ssh_key"
+ssh-key                             = "put your pub ssh key here"
+allowed-publicIPs                   = ["0.0.0.0/0"]
+s3bucket-name                       = "postgres-backups-example"

@@ -1,0 +1,15 @@
+- name: Add k8s yum GPG key.
+  rpm_key:
+    key: https://packages.cloud.google.com/yum/doc/yum-key.gpg
+    state: present
+
+- name: Add k8s RPM GPG key.
+  rpm_key:
+    key: https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg 
+    state: present
+
+- name: Add yum repo for k8s
+  template: 
+    src: kubernetes.repo.j2
+    dest: /etc/yum.repos.d/kubernetes.repo
+  register: override_template

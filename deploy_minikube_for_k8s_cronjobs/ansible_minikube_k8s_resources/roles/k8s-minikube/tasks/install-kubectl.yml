@@ -1,0 +1,5 @@
+- name: Installing kubectl
+  package:
+    name: "{{ kubectl_package }}"
+    state: "{{ kubectl_package_state }}"
+    allow_downgrade: yes

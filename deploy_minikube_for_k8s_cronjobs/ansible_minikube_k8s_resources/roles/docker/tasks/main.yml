@@ -1,0 +1,57 @@
+---
+- include_tasks: repo-CentOs.yml
+  when: ansible_os_family == 'RedHat'
+
+- name: Installing epel repo
+  package:
+    name: "epel-release"
+    state: "present"
+    allow_downgrade: yes
+
+- name: Install device mapper persistent data
+  package: 
+    name: "{{ data_mapper_package }}"
+    state: "{{ data_mapper_package_state }}"
+
+- name: Install lvm2
+  package:
+    name: "{{ lvm2_package }}"
+    state: "{{ lvm2_package_state }}" 
+
+- name: Installing Docker.
+  package:
+    name: "{{ docker_package }}"
+    state: "{{ docker_package_state }}"
+  notify: restart docker
+
+- name: Installing pip 2
+  package:
+    name: python2-pip
+    state: "present"
+    allow_downgrade: yes
+
+- name: Installing Docker-compose.
+  package:
+    name: "{{ docker_compose_package }}"
+    state: "{{ docker_compose_package_state }}"
+
+- name: Ensuring Docker is enabled at boot.
+  service:
+    name: docker
+    state: "{{ docker_service_state }}"
+    enabled: "{{ docker_service_enabled }}"
+
+- name: Make sure that handlers get notified to avoid firewall issues.
+  meta: flush_handlers
+
+- include_tasks: docker-users.yml
+  when: docker_users
+  
+# TODO: Remove this shim once 18.09.1 or later is released.
+- import_tasks: docker-config.yml
+  when: ansible_service_mgr == 'systemd'
+
+- name: Create and start Docker-composes services
+  docker_service:
+    project_src: /home/{{ linux_user }}/compose-postgres-metabase
+    state: present    

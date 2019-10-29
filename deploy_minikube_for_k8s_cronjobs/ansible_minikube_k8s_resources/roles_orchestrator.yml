@@ -1,0 +1,28 @@
+---
+- hosts: k8s-nodes
+  gather_facts: true
+  become: true   
+  roles:
+     - {role: docker}
+     - {role: k8s-minikube}
+
+- hosts: k8s-nodes
+  become: yes
+  tasks:
+    - pip:
+        name: requests
+        version: 2.22.0
+    - pip:
+        name: setuptools
+        version: 41.4.0
+    - pip:
+        name: openshift
+        version: 0.9.1     
+        
+- hosts: k8s-nodes
+  gather_facts: true 
+  roles:
+     - {role: k8s-resources}
+  vars_files:
+    - ./vars/pgpass_file.yml
+    - ./vars/aws-credentials.yml

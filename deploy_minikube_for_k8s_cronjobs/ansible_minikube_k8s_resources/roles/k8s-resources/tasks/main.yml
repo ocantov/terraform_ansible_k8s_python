@@ -1,0 +1,39 @@
+---
+- name: Namespace
+  k8s:
+    state: present
+    definition: "{{ lookup('template', 'namespace.yml') }}"
+
+- name: ConfigMaps
+  k8s:
+    state: present
+    definition: "{{ lookup('template', 'configmaps.yml') }}"
+
+- name: CronJons
+  k8s:
+    state: present
+    definition: "{{ lookup('template', 'cronjobs.yml') }}"
+
+
+- name: Persistent Volumes
+  k8s:
+    state: present
+    definition: "{{ lookup('template', 'pv.yml') }}"
+
+
+- name: Persistent Volume Claims
+  k8s:
+    state: present
+    definition: "{{ lookup('template', 'pvc.yml') }}"
+
+
+- name: Secrets
+  k8s:
+    state: present
+    definition: "{{ lookup('template', 'secrets.yml') }}"
+
+- name: Storage Class
+  k8s:
+    state: present
+    definition: "{{ lookup('template', 'storageclass.yml') }}"
+

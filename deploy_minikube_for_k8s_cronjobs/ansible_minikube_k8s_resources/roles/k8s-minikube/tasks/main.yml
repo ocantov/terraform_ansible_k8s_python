@@ -1,0 +1,20 @@
+---
+#- name: host
+  #debug: msg="{{ hostvars[inventory_hostname].keys() }}"
+  #debug: msg="{{ hostvars[inventory_hostname].ansible_nodename }}"
+  #debug: msg="{{ hostvars['master']['ansible_facts']['distribution'] }}"
+ # debug: msg="{{ hostvars['master']['ansible_facts']['eth0']['ipv4']['address'] }}"
+ # debug: msg="{{ hostvars[inventory_hostname].ansible_eth0.ipv4.address }}"
+ # when: inventory_hostname != "master"
+
+- import_tasks: repo-CentOs.yml
+  when: ansible_os_family == 'RedHat'
+
+- import_tasks: install-kubectl.yml
+
+
+#You cannot use loops on 'import_tasks' statements. You should use 'include_tasks' instead.
+- include_tasks: install-minikube.yml
+
+- import_tasks: post-install-config.yml
+   
